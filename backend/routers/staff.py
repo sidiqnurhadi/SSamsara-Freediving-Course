@@ -1,12 +1,14 @@
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from lib.access import sync_profile_level
 from lib.auth import assert_can_view, current_user, require_roles
+from lib.certs import shape_cert
 from lib.db import db
 from lib.disciplines import DEPTH
 from lib.levels import rank_of
+from lib.storage import delete_pdf, save_pdf, validate_pdf
 from models.schemas import (
     AdminCertificationInput,
     AdminCertificationUpdate,
@@ -164,56 +166,40 @@ async def admin_certifications(
     query: dict[str, Any] = {"user_id": user_id} if user_id else {}
     docs = await db.certifications.find(query, {"_id": 0}).to_list(1000)
     names = {u["id"]: u["name"] for u in await db.users.find({}, {"_id": 0}).to_list(2000)}
-    out: list[Certification] = []
-    for doc in docs:
-        out.append(
-            Certification(
-                id=doc["id"],
-                user_id=doc["user_id"],
-                user_name=names.get(doc["user_id"], doc.get("user_name", "")),
-                agency=doc["agency"],
-                certification=doc["certification"],
-                instructor=doc.get("instructor"),
-                certification_date=doc.get("certification_date"),
-                expiration_date=doc.get("expiration_date"),
-                certificate_number=doc.get("certificate_number"),
-                certificate_file_url=doc.get("certificate_file_url"),
-                status=doc.get("status") or "verified",
-                rank=rank_of(doc.get("agency"), doc.get("certification")) or 0,
-            )
-        )
+    out = [shape_cert(doc, names.get(doc["user_id"], "")) for doc in docs]
     out.sort(key=lambda c: (c.user_name, -c.rank))
     return out
 
 
 @router.post("/admin/certifications", response_model=Certification)
 async def admin_assign_certification(
-    payload: AdminCertificationInput, _: dict[str, Any] = Depends(admin_only)
+    payload: AdminCertificationInput, viewer: dict[str, Any] = Depends(admin_only)
 ):
     user = await db.users.find_one({"id": payload.user_id}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if rank_of(payload.agency, payload.certification) is None:
         raise HTTPException(status_code=422, detail="Unknown certification level for that agency")
-    doc = {
+    doc: dict[str, Any] = {
         "id": new_id(),
         "user_name": user["name"],
         **payload.model_dump(),
-        "expiration_date": None,
         "certificate_file_url": None,
+        "certificate_file_key": None,
         "created_at": now_utc(),
     }
+    if doc["status"] == "verified":
+        doc["verified_at"] = now_utc()
+        doc["verified_by"] = viewer["name"]
     await db.certifications.insert_one(dict(doc))
     # learning access follows immediately — no per-resource permission editing
     await sync_profile_level(payload.user_id)
-    return Certification(
-        **{**doc, "rank": rank_of(payload.agency, payload.certification) or 0}
-    )
+    return shape_cert(doc, user["name"])
 
 
 @router.patch("/admin/certifications/{cert_id}", response_model=Certification)
 async def admin_update_certification(
-    cert_id: str, payload: AdminCertificationUpdate, _: dict[str, Any] = Depends(admin_only)
+    cert_id: str, payload: AdminCertificationUpdate, viewer: dict[str, Any] = Depends(admin_only)
 ):
     existing = await db.certifications.find_one({"id": cert_id}, {"_id": 0})
     if not existing:
@@ -224,15 +210,58 @@ async def admin_update_certification(
     doc = {**existing, **updates}
     if rank_of(doc.get("agency"), doc.get("certification")) is None:
         raise HTTPException(status_code=422, detail="Unknown certification level for that agency")
+    if updates.get("status") == "verified" and existing.get("status") != "verified":
+        updates["verified_at"] = now_utc()
+        updates["verified_by"] = viewer["name"]
+        doc.update(updates)
     await db.certifications.update_one({"id": cert_id}, {"$set": {**updates, "updated_at": now_utc()}})
     await sync_profile_level(doc["user_id"])
-    return Certification(
-        **{
-            **doc,
-            "status": doc.get("status") or "verified",
-            "rank": rank_of(doc.get("agency"), doc.get("certification")) or 0,
-        }
-    )
+    return shape_cert(doc)
+
+
+@router.post("/admin/certifications/{cert_id}/file", response_model=Certification)
+async def admin_upload_certificate(
+    cert_id: str,
+    file: UploadFile = File(...),
+    viewer: dict[str, Any] = Depends(admin_only),
+):
+    existing = await db.certifications.find_one({"id": cert_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Certification not found")
+    content = await file.read()
+    problem = validate_pdf(file.filename or "", content)
+    if problem:
+        raise HTTPException(status_code=422, detail=problem)
+    delete_pdf(existing.get("certificate_file_key"))  # replace keeps only one file
+    key = save_pdf(content)
+    updates = {
+        "certificate_file_key": key,
+        "certificate_file_name": file.filename,
+        "certificate_file_size": len(content),
+        "certificate_uploaded_at": now_utc(),
+        "certificate_uploaded_by": viewer["name"],
+        "updated_at": now_utc(),
+    }
+    await db.certifications.update_one({"id": cert_id}, {"$set": updates})
+    return shape_cert({**existing, **updates})
+
+
+@router.delete("/admin/certifications/{cert_id}/file", response_model=Certification)
+async def admin_delete_certificate(cert_id: str, _: dict[str, Any] = Depends(admin_only)):
+    existing = await db.certifications.find_one({"id": cert_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Certification not found")
+    delete_pdf(existing.get("certificate_file_key"))
+    cleared = {
+        "certificate_file_key": None,
+        "certificate_file_name": None,
+        "certificate_file_size": None,
+        "certificate_uploaded_at": None,
+        "certificate_uploaded_by": None,
+        "updated_at": now_utc(),
+    }
+    await db.certifications.update_one({"id": cert_id}, {"$set": cleared})
+    return shape_cert({**existing, **cleared})
 
 
 @router.delete("/admin/certifications/{cert_id}", response_model=OkResult)
@@ -240,6 +269,7 @@ async def admin_delete_certification(cert_id: str, _: dict[str, Any] = Depends(a
     existing = await db.certifications.find_one({"id": cert_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Certification not found")
+    delete_pdf(existing.get("certificate_file_key"))
     await db.certifications.delete_one({"id": cert_id})
     await sync_profile_level(existing["user_id"])
     return OkResult()

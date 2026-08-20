@@ -21,6 +21,10 @@ Auth is an httpOnly JWT cookie (`fd_session`); roles: `student`, `instructor`, `
 - `training_entries` — unified history: `source` = `session` (timer) or `manual`
 - `learning_resources`, `certifications`, `instructor_students`, `instructor_notes`, `password_resets`
   - `certifications` also carry `status` (pending|verified|expired|rejected) — only `verified` grants access
+    — plus `verification_url` (https only), `verified_at`/`verified_by`, and private PDF metadata
+    (`certificate_file_key`, `certificate_file_name`, `certificate_file_size`,
+    `certificate_uploaded_at`, `certificate_uploaded_by`). The storage **key is never serialised** to
+    clients; the API exposes `has_file` instead.
   - `learning_resources` also carry `access_agency`, `minimum_access_level`, `minimum_level_rank`,
     `resource_access_type` (certification_level|course_enrollment|admin_only|public)
 
@@ -41,6 +45,24 @@ Auth is an httpOnly JWT cookie (`fd_session`); roles: `student`, `instructor`, `
   with no per-resource permission editing.
 - Roles: `student`, `instructor`, `admin`, `super_admin`. Role controls what a user may *do*;
   certification level controls what educational content they may *read*.
+
+## Certificate documents (verification link + private PDF)
+- `lib/storage.py` writes uploads to `backend/uploads/certificates/<uuid>.pdf` (override with
+  `CERT_UPLOAD_DIR`). Validation: `.pdf` extension, `%PDF-` magic bytes, ≤10 MB. The directory is
+  **not** served statically and filenames are opaque, so there is no guessable public URL.
+- `GET /api/certifications/{id}/file` streams the PDF through `assert_can_view` — owner,
+  admin/super_admin, or an instructor the diver is assigned to; anyone else gets 403 (401 anonymous).
+- Admin-only: `POST/DELETE /api/admin/certifications/{id}/file` (upload/replace/remove) and
+  `POST/PATCH /api/admin/certifications` which now accept `verification_url` (https validated),
+  instructor, date, expiration and certificate number. Setting status → `verified` stamps
+  `verified_at`/`verified_by` and recalculates the diver's level immediately.
+- Frontend: `lib/files.ts` (authenticated blob fetch + multipart upload) and
+  `components/CertificateBits.tsx` (status badge, external verification link with
+  `rel="noopener noreferrer nofollow"`, PDF preview modal / download / full screen). The admin panel
+  lives in `pages/AdminCertifications.tsx` with search + agency/level/status/date filters and
+  Link ✓ / PDF ✓ indicators. Students see their own records read-only (no upload/remove controls).
+- Certification history is never overwritten — each level is its own record and the highest verified
+  one determines the current level.
 
 ## Key logic
 - Disciplines: depth = CWT/CWTB/CNF/FIM/VWT/NLT, dynamic = DYN/DYNB/DNF, static = STA (value in seconds).
@@ -70,6 +92,9 @@ students; 7 courses; 11 learning resources (AIDA 1–4 manuals + level-gated gui
 policy); 5 table templates (CO2 8-round, O2 5-round, 3 warm-ups).
 Level-demo accounts: Super User (super_admin, AIDA 1–4 verified), Raka Freediver (AIDA 2, 16 dives,
 2 goals, 3 sessions), Maya Freediver (AIDA 3, 18 dives, 2 goals, 5 sessions, 4 personal tables).
+Every seeded certification carries a **placeholder** verification link
+(`https://example.org/demo-verification/aida-N?...`) — never a real AIDA record. Certificate PDFs are
+not seeded; upload one from the admin Certifications tab to exercise the document flow.
 See memory/test_credentials.md for logins and the expected access matrix.
 
 ## Known deviations
@@ -78,3 +103,6 @@ See memory/test_credentials.md for logins and the expected access matrix.
 - Course enrollment is not built yet, so `resource_access_type = course_enrollment` is accepted and
   stored (and treated as ungated) but no enrollment check exists — AIDA manuals use
   `certification_level` as specified.
+- Certificate PDFs are stored on the pod's local disk (`backend/uploads/certificates`). That survives
+  restarts but not a redeploy/rebuild — move `CERT_UPLOAD_DIR` to a mounted volume or object storage
+  before relying on it in production.

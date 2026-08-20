@@ -494,6 +494,7 @@ async def seed_demo_divers(instructor_id: str) -> None:
         # verified certifications are the source of truth for learning access
         await db.certifications.delete_many({"user_id": uid})
         for index, level in enumerate(spec["certs"]):
+            rank = rank_of("AIDA", level)
             await db.certifications.insert_one(
                 {
                     "id": new_id(),
@@ -504,9 +505,16 @@ async def seed_demo_divers(instructor_id: str) -> None:
                     "instructor": "John Doe",
                     "certification_date": days_ago_str(360 - index * 90),
                     "expiration_date": None,
-                    "certificate_number": f"AIDA-{rank_of('AIDA', level)}-{1000 + index}",
+                    "certificate_number": f"AIDA-{rank}-{1000 + index}",
                     "certificate_file_url": None,
+                    "certificate_file_key": None,
+                    "certificate_file_name": None,
+                    "certificate_file_size": None,
+                    # placeholder demo link — not a real certification record
+                    "verification_url": f"https://example.org/demo-verification/aida-{rank}?diver=demo",
                     "status": "verified",
+                    "verified_at": now_utc(),
+                    "verified_by": "Maya Admin",
                 }
             )
 
@@ -844,7 +852,11 @@ async def main() -> None:
             "expiration_date": None,
             "certificate_number": "AIDA-2-90231",
             "certificate_file_url": None,
+            "certificate_file_key": None,
+            "verification_url": "https://example.org/demo-verification/aida-2?diver=demo",
             "status": "verified",
+            "verified_at": now_utc(),
+            "verified_by": "Maya Admin",
         }
     )
 

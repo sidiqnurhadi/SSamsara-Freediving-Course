@@ -1,11 +1,14 @@
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 
 from lib.access import current_level, effective_rank, sync_profile_level
 from lib.auth import assert_can_view, current_user, require_roles
+from lib.certs import shape_cert
 from lib.db import db
 from lib.levels import AGENCIES, VERIFIED, can_access, level_at, rank_of, resolve_agency
+from lib.storage import path_for
 from models.schemas import (
     Certification,
     CertificationInput,
@@ -214,19 +217,26 @@ async def delete_resource(resource_id: str, viewer: dict[str, Any] = Depends(adm
 
 # ---------------- certifications ----------------
 def _cert(doc: dict[str, Any]) -> Certification:
-    return Certification(
-        id=doc["id"],
-        user_id=doc["user_id"],
-        user_name=doc.get("user_name", ""),
-        agency=doc["agency"],
-        certification=doc["certification"],
-        instructor=doc.get("instructor"),
-        certification_date=doc.get("certification_date"),
-        expiration_date=doc.get("expiration_date"),
-        certificate_number=doc.get("certificate_number"),
-        certificate_file_url=doc.get("certificate_file_url"),
-        status=doc.get("status") or VERIFIED,
-        rank=rank_of(doc.get("agency"), doc.get("certification")) or 0,
+    return shape_cert(doc)
+
+
+@router.get("/certifications/{cert_id}/file")
+async def download_certificate(cert_id: str, viewer: dict[str, Any] = Depends(current_user)):
+    """Authenticated certificate download. No public/predictable URL exists for these files."""
+    doc = await db.certifications.find_one({"id": cert_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Certification not found")
+    # self, admin/super_admin, or an instructor this diver is assigned to
+    await assert_can_view(viewer, doc["user_id"])
+    key = doc.get("certificate_file_key")
+    path = path_for(key) if key else None
+    if not path:
+        raise HTTPException(status_code=404, detail="No certificate PDF has been uploaded")
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=doc.get("certificate_file_name") or "certificate.pdf",
+        content_disposition_type="inline",
     )
 
 

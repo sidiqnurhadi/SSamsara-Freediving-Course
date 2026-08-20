@@ -230,8 +230,16 @@ export interface Certification {
   expiration_date: string | null;
   certificate_number: string | null;
   certificate_file_url: string | null;
+  verification_url: string | null;
+  has_file: boolean;
+  certificate_file_name: string | null;
+  certificate_file_size: number | null;
+  certificate_uploaded_at: string | null;
+  certificate_uploaded_by: string | null;
   status: CertStatus;
   rank: number;
+  verified_at: string | null;
+  verified_by: string | null;
 }
 
 export interface DashboardStat {

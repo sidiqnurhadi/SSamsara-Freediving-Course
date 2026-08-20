@@ -3,6 +3,7 @@ import { Award, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
+import { CertificatePdf, StatusBadge, VerificationLink } from "@/components/CertificateBits";
 import { EmptyState, ErrorState } from "@/components/Bits";
 import { LoadingVeil } from "@/components/Guards";
 import { Button } from "@/components/ui/button";
@@ -179,6 +180,9 @@ export default function Certifications() {
                 <div>
                   <p className="text-xs tracking-[0.2em] text-primary uppercase">{cert.agency}</p>
                   <p className="heading mt-2 text-xl font-semibold">{cert.certification}</p>
+                  <div className="mt-2">
+                    <StatusBadge status={cert.status} testid={`certification-status-${cert.id}`} />
+                  </div>
                 </div>
                 <div className="flex items-start gap-1">
                   <Award className="mt-1 size-4 text-[#f0b45f]" />
@@ -194,7 +198,6 @@ export default function Certifications() {
                 </div>
               </div>
               <dl className="mt-4 space-y-1.5 text-xs">
-                <Row label="Status" value={cert.status} />
                 <Row label="Certified" value={cert.certification_date ? formatDate(cert.certification_date) : "—"} />
                 <Row label="Instructor" value={cert.instructor ?? "—"} />
                 <Row label="Number" value={cert.certificate_number ?? "—"} />
@@ -202,6 +205,13 @@ export default function Certifications() {
                   <Row label="Expires" value={formatDate(cert.expiration_date)} />
                 ) : null}
               </dl>
+              <div
+                className="mt-4 flex flex-col items-start gap-3 border-t border-white/6 pt-3"
+                data-testid={`certification-documents-${cert.id}`}
+              >
+                <VerificationLink cert={cert} testid={`certification-verify-${cert.id}`} />
+                <CertificatePdf cert={cert} testid={`certification-pdf-${cert.id}`} />
+              </div>
             </div>
           ))}
         </div>

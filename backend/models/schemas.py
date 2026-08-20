@@ -366,6 +366,17 @@ class CertificationInput(BaseModel):
     expiration_date: Optional[str] = None
     certificate_number: Optional[str] = None
     certificate_file_url: Optional[str] = None
+    verification_url: Optional[str] = None
+
+    @field_validator("verification_url")
+    @classmethod
+    def https_only(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v.strip() == "":
+            return None
+        url = v.strip()
+        if not url.startswith("https://"):
+            raise ValueError("The verification link must be a valid https:// URL")
+        return url
 
 
 class Certification(BaseModel):
@@ -379,8 +390,17 @@ class Certification(BaseModel):
     expiration_date: Optional[str] = None
     certificate_number: Optional[str] = None
     certificate_file_url: Optional[str] = None
+    verification_url: Optional[str] = None
+    # file metadata — the storage key itself is never exposed to clients
+    has_file: bool = False
+    certificate_file_name: Optional[str] = None
+    certificate_file_size: Optional[int] = None
+    certificate_uploaded_at: Optional[datetime] = None
+    certificate_uploaded_by: Optional[str] = None
     status: CertStatus = "pending"
     rank: int = 0
+    verified_at: Optional[datetime] = None
+    verified_by: Optional[str] = None
 
 
 class AdminCertificationInput(BaseModel):
@@ -389,14 +409,41 @@ class AdminCertificationInput(BaseModel):
     certification: str = Field(min_length=1)
     instructor: Optional[str] = None
     certification_date: Optional[str] = None
+    expiration_date: Optional[str] = None
     certificate_number: Optional[str] = None
+    verification_url: Optional[str] = None
     status: CertStatus = "verified"
+
+    @field_validator("verification_url")
+    @classmethod
+    def https_only(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v.strip() == "":
+            return None
+        url = v.strip()
+        if not url.startswith("https://"):
+            raise ValueError("The verification link must be a valid https:// URL")
+        return url
 
 
 class AdminCertificationUpdate(BaseModel):
     status: Optional[CertStatus] = None
     certification: Optional[str] = None
     agency: Optional[str] = None
+    instructor: Optional[str] = None
+    certification_date: Optional[str] = None
+    expiration_date: Optional[str] = None
+    certificate_number: Optional[str] = None
+    verification_url: Optional[str] = None
+
+    @field_validator("verification_url")
+    @classmethod
+    def https_only(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v.strip() == "":
+            return None
+        url = v.strip()
+        if not url.startswith("https://"):
+            raise ValueError("The verification link must be a valid https:// URL")
+        return url
 
 
 # ---------- dashboards / analytics ----------
