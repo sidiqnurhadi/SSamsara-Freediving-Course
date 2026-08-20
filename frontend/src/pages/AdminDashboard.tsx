@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { EmptyState, ErrorState, StatTile } from "@/components/Bits";
@@ -767,6 +767,7 @@ function CertificationsPanel() {
   const qc = useQueryClient();
   const [studentId, setStudentId] = useState("");
   const [level, setLevel] = useState("AIDA 2");
+  const [search, setSearch] = useState("");
 
   const certs = useQuery({
     queryKey: ["admin-certifications"],
@@ -833,11 +834,33 @@ function CertificationsPanel() {
   if (certs.isLoading) return <LoadingVeil label="Loading certifications" />;
   if (certs.isError) return <ErrorState testid="admin-certifications-error" />;
 
+  const term = search.trim().toLowerCase();
+  const matches = (users.data ?? []).filter(
+    (user) =>
+      !term ||
+      user.name.toLowerCase().includes(term) ||
+      user.email.toLowerCase().includes(term) ||
+      user.role.toLowerCase().includes(term),
+  );
+
   return (
     <div className="space-y-5">
       <div className="glass flex flex-wrap items-end gap-3 rounded-2xl px-5 py-5">
         <div className="min-w-56 flex-1 space-y-2">
-          <Label className="text-xs">Diver</Label>
+          <Label className="text-xs">Find a diver</Label>
+          <div className="relative">
+            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="Search by name, email or role"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setStudentId("");
+              }}
+              data-testid="admin-cert-user-search"
+            />
+          </div>
           <Select value={studentId} onValueChange={(value: string) => setStudentId(value)}>
             <SelectTrigger data-testid="admin-cert-user-select">
               <SelectValue>
@@ -847,13 +870,18 @@ function CertificationsPanel() {
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {(users.data ?? []).map((user) => (
+              {matches.map((user) => (
                 <SelectItem key={user.id} value={user.id}>
                   {user.name} · {user.role}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <p className="text-[11px] text-muted-foreground" data-testid="admin-cert-user-match-count">
+            {matches.length === 0
+              ? "No diver matches that search."
+              : `${matches.length} of ${(users.data ?? []).length} divers shown`}
+          </p>
         </div>
         <div className="min-w-40 space-y-2">
           <Label className="text-xs">Certification</Label>
