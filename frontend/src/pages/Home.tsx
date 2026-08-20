@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { ArrowRight, Compass, Gauge, ShieldCheck, Waves } from "lucide-react";
+import { ArrowRight, Compass, Gauge, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
+import { BrandMark } from "@/components/Brand";
 import { buttonVariants } from "@/components/ui/button";
 import PublicLayout from "@/components/PublicLayout";
 import { apiGet } from "@/lib/api";
@@ -58,7 +59,7 @@ export default function Home() {
             transition={{ duration: 0.9 }}
             className="text-xs tracking-[0.34em] text-primary uppercase"
           >
-            Depth Freediving School
+            Ssamsara Freedive
           </motion.p>
           <motion.h1
             initial={{ opacity: 0, y: 18 }}
@@ -183,7 +184,7 @@ export default function Home() {
       <section className="mx-auto max-w-6xl px-5 py-20">
         <div className="glass flex flex-col items-start gap-6 rounded-3xl px-7 py-10 md:flex-row md:items-center md:justify-between">
           <div>
-            <Waves className="size-6 text-primary" />
+            <BrandMark className="size-10" />
             <h2 className="heading mt-4 text-2xl font-semibold sm:text-3xl">
               Your logbook is waiting
             </h2>

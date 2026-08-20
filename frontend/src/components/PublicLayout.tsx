@@ -1,6 +1,7 @@
-import { Menu, Waves } from "lucide-react";
+import { Menu } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
+import { BRAND_NAME, Brand, BrandMark } from "@/components/Brand";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useMe } from "@/lib/session";
@@ -21,11 +22,8 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
     <div className="min-h-dvh bg-background">
       <header className="sticky top-0 z-40 border-b border-white/5 bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
-          <Link to="/" className="flex items-center gap-2" data-testid="public-logo">
-            <Waves className="size-5 text-primary" />
-            <span className="heading text-sm font-semibold tracking-[0.24em] uppercase">
-              Depth School
-            </span>
+          <Link to="/" data-testid="public-logo">
+            <Brand logoClassName="size-9" />
           </Link>
 
           <nav className="hidden items-center gap-7 md:flex">
@@ -70,7 +68,7 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
               </SheetTrigger>
               <SheetContent side="right" className="w-72">
                 <SheetHeader>
-                  <SheetTitle className="heading">Depth School</SheetTitle>
+                  <SheetTitle className="heading">{BRAND_NAME}</SheetTitle>
                 </SheetHeader>
                 <div className="flex flex-col gap-1 px-4">
                   {LINKS.map((link) => (
@@ -101,9 +99,9 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
 
       <footer className="border-t border-white/5 px-5 py-10">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-2">
-            <Waves className="size-4 text-primary" />
-            <span>Depth Freediving School</span>
+          <div className="flex items-center gap-2.5">
+            <BrandMark className="size-7" />
+            <span>{BRAND_NAME}</span>
           </div>
           <p>Learn freediving safely, progressively, and confidently.</p>
         </div>

@@ -11,10 +11,10 @@ import {
   Timer,
   Trophy,
   User as UserIcon,
-  Waves,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
+import { BRAND_NAME, Brand, BrandMark } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { endSession, useMe } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -57,9 +57,8 @@ export default function AppShell({
   return (
     <div className="min-h-dvh bg-background">
       <aside className="fixed top-0 left-0 z-30 hidden h-dvh w-64 flex-col border-r border-white/5 bg-sidebar px-4 py-6 lg:flex">
-        <Link to="/" className="mb-8 flex items-center gap-2 px-2" data-testid="sidebar-logo">
-          <Waves className="size-5 text-primary" />
-          <span className="heading text-sm font-semibold tracking-[0.22em] uppercase">Depth</span>
+        <Link to="/" className="mb-8 flex items-center px-1" data-testid="sidebar-logo">
+          <Brand logoClassName="size-9" wordClassName="text-[13px] tracking-[0.14em]" />
         </Link>
         <nav className="flex flex-1 flex-col gap-1">
           {NAV.map((item) => (
@@ -104,9 +103,9 @@ export default function AppShell({
       <div className="lg:pl-64">
         <header className="sticky top-0 z-20 flex items-center justify-between border-b border-white/5 bg-background/85 px-4 py-3 backdrop-blur-md lg:px-8">
           <div className="flex items-center gap-2 lg:hidden">
-            <Waves className="size-5 text-primary" />
-            <span className="heading text-xs font-semibold tracking-[0.2em] uppercase">
-              Diver Log
+            <BrandMark className="size-7" />
+            <span className="heading text-xs font-semibold tracking-[0.14em] uppercase">
+              {BRAND_NAME}
             </span>
           </div>
           <h1 className="heading hidden text-lg font-semibold lg:block" data-testid="page-title">

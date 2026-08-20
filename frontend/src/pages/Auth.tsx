@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Waves } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { Brand } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,11 +42,8 @@ export function AuthFrame({
       />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,24,32,0.8),rgba(2,18,26,0.97))]" aria-hidden />
       <div className="glass relative w-full max-w-md rounded-3xl px-7 py-9">
-        <Link to="/" className="flex items-center gap-2" data-testid="auth-logo-link">
-          <Waves className="size-5 text-primary" />
-          <span className="heading text-xs font-semibold tracking-[0.24em] uppercase">
-            Depth School
-          </span>
+        <Link to="/" data-testid="auth-logo-link">
+          <Brand logoClassName="size-9" />
         </Link>
         <h1 className="heading mt-6 text-2xl font-semibold">{title}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>

@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LogOut, Waves } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { BrandMark } from "@/components/Brand";
 import { EmptyState, ErrorState, StatTile } from "@/components/Bits";
 import { LoadingVeil } from "@/components/Guards";
 import PerformanceChart from "@/components/PerformanceChart";
@@ -35,9 +36,9 @@ function StaffFrame({ title, children }: { title: string; children: React.ReactN
     <div className="min-h-dvh bg-background">
       <header className="sticky top-0 z-20 border-b border-white/5 bg-background/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
-          <Link to="/" className="flex items-center gap-2">
-            <Waves className="size-5 text-primary" />
-            <span className="heading text-xs font-semibold tracking-[0.24em] uppercase">
+          <Link to="/" className="flex items-center gap-2.5">
+            <BrandMark className="size-8" />
+            <span className="heading text-xs font-semibold tracking-[0.2em] uppercase">
               {title}
             </span>
           </Link>

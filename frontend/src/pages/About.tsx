@@ -1,7 +1,7 @@
 import PublicLayout from "@/components/PublicLayout";
 
 const LOCATIONS = [
-  { name: "Depth School Pool", detail: "25 m indoor pool — STA, DYN and DNF sessions twice weekly." },
+  { name: "Ssamsara Pool", detail: "25 m indoor pool — STA, DYN and DNF sessions twice weekly." },
   { name: "Pulau Pramuka", detail: "Sheltered 30 m site, our home for beginner and intermediate depth." },
   { name: "Nusa Penida", detail: "Deep blue water for advanced progression and coaching camps." },
 ];
@@ -15,7 +15,7 @@ export default function About() {
           Depth is patience, not force
         </h1>
         <p className="mt-6 text-muted-foreground">
-          Depth Freediving School was founded in 2018 by instructors who wanted courses that move
+          Ssamsara Freedive was founded in 2018 by instructors who wanted courses that move
           at the diver's pace. We teach breathing and relaxation before technique, technique before
           depth, and depth only when equalization is reliable.
         </p>
