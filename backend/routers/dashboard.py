@@ -2,15 +2,18 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
+from lib.access import effective_rank
 from lib.auth import current_user
 from lib.date_utils import week_start_str
 from lib.db import db
 from lib.disciplines import DEPTH, DYNAMIC, UNIT
+from lib.levels import AGENCIES, resolve_agency
 from models.schemas import (
     DashboardData,
     DashboardStat,
     DiveLog,
     DiverProfile,
+    LearningSummary,
     SeriesPoint,
     UserPublic,
     WeeklyTraining,
@@ -98,6 +101,30 @@ async def dashboard(viewer: dict[str, Any] = Depends(current_user)):
     )
 
     _ = UNIT  # discipline units are attached per-stat above
+    info = await effective_rank(viewer)
+    agency = resolve_agency(info["agency"])
+    resources = await db.learning_resources.find({"is_active": True}, {"_id": 0}).to_list(500)
+    unrestricted = bool(info.get("unrestricted"))
+    available = sum(
+        1
+        for doc in resources
+        if unrestricted
+        or doc.get("resource_access_type", "certification_level") != "certification_level"
+        or info["rank"] >= int(doc.get("minimum_level_rank") or 0)
+    )
+    learning = LearningSummary(
+        agency=agency,
+        level=info["level"],
+        rank=info["rank"],
+        next_level=info["next_level"],
+        available_count=available,
+        locked_count=len(resources) - available,
+        total_count=len(resources),
+        accessible_levels=[
+            label for label, rank in AGENCIES[agency] if unrestricted or rank <= info["rank"]
+        ],
+        unrestricted=unrestricted,
+    )
     return DashboardData(
         user=UserPublic(
             id=viewer["id"],
@@ -116,4 +143,5 @@ async def dashboard(viewer: dict[str, Any] = Depends(current_user)):
         depth_discipline=depth_discipline,
         week_training=list(buckets.values()),
         week_total_seconds=sum(b.total_seconds for b in buckets.values()),
+        learning=learning,
     )

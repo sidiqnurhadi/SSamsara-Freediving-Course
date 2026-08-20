@@ -1,11 +1,14 @@
 """Idempotent demo seed. Run: cd /app/backend && python seed.py"""
 
 import asyncio
+from typing import Any
 
+from lib.access import sync_profile_level
 from lib.auth import hash_password
 from lib.date_utils import days_ago_str
 from lib.db import db
 from lib.disciplines import UNIT, group_of
+from lib.levels import rank_of
 from lib.pb import recalc_discipline_pb
 from models.schemas import new_id, now_utc
 
@@ -176,15 +179,21 @@ COURSES = [
     },
 ]
 
+DEMO_URL = "https://example.org/demo-resources/placeholder.pdf"
+
 RESOURCES = [
-    ("AIDA 1", "AIDA International", "Level 1", "Introduction to Freediving — discover-level theory overview.", "AIDA Manuals", "manual", "https://www.aidainternational.org/Education"),
-    ("AIDA 2", "AIDA International", "Level 2", "Freediver Course Manual — breathing, safety and first depth dives.", "AIDA Manuals", "manual", "https://www.aidainternational.org/Education"),
-    ("AIDA 3", "AIDA International", "Level 3", "Advanced Freediver Manual — freefall, rescue and deeper physiology.", "AIDA Manuals", "manual", "https://www.aidainternational.org/Education"),
-    ("AIDA 4", "AIDA International", "Level 4", "Master Freediver Manual — mouthfill, planning and autonomy.", "AIDA Manuals", "manual", "https://www.aidainternational.org/Education"),
-    ("Buddy & Rescue Procedures", "Ssamsara Freedive", "All levels", "One-page checklist for buddy rotation, safety diver positioning and rescue.", "Freediving Safety", "pdf", "https://www.aidainternational.org/Education"),
-    ("Equalization Fundamentals", "Ssamsara Freedive", "Level 2+", "Frenzel mechanics, reverse packing and mouthfill progression drills.", "Equalization", "link", "https://www.aidainternational.org/Education"),
-    ("Dry Training Guide", "Ssamsara Freedive", "All levels", "How to structure CO2 and O2 table cycles safely across a training week.", "Training", "link", "https://www.aidainternational.org/Education"),
-    ("School Safety Policy", "Ssamsara Freedive", "All levels", "Our in-water supervision rules and emergency action plan.", "School Materials", "pdf", "https://www.aidainternational.org/Education"),
+    # title, organization, level, description, category, type, url, minimum_access_level, access_type
+    ("AIDA 1 Manual", "AIDA", "AIDA 1", "Introduction to Freediving — discover-level theory overview.", "AIDA Manuals", "manual", "https://www.aidainternational.org/Education", "AIDA 1", "certification_level"),
+    ("AIDA 2 Manual", "AIDA", "AIDA 2", "Freediver Course Manual — breathing, safety and first depth dives.", "AIDA Manuals", "manual", "https://www.aidainternational.org/Education", "AIDA 2", "certification_level"),
+    ("AIDA 3 Manual", "AIDA", "AIDA 3", "Advanced Freediver Manual — freefall, rescue and deeper physiology.", "AIDA Manuals", "manual", "https://www.aidainternational.org/Education", "AIDA 3", "certification_level"),
+    ("AIDA 4 Manual", "AIDA", "AIDA 4", "Master Freediver Manual — mouthfill, planning and autonomy.", "AIDA Manuals", "manual", "https://www.aidainternational.org/Education", "AIDA 4", "certification_level"),
+    ("Equalization Basics", "Ssamsara Freedive", "AIDA 1", "Valsalva vs Frenzel, ear anatomy and the first dry drills.", "Equalization", "link", DEMO_URL, "AIDA 1", "certification_level"),
+    ("Frenzel Technique", "Ssamsara Freedive", "AIDA 2", "Tongue-lock mechanics and isolating the glottis, with practice drills.", "Equalization", "pdf", DEMO_URL, "AIDA 2", "certification_level"),
+    ("Freefall Fundamentals", "Ssamsara Freedive", "AIDA 3", "Body position, timing and relaxation during freefall.", "Training", "pdf", DEMO_URL, "AIDA 3", "certification_level"),
+    ("Advanced Training Planning", "Ssamsara Freedive", "AIDA 4", "Periodisation, load management and season planning for deep dives.", "Training", "link", DEMO_URL, "AIDA 4", "certification_level"),
+    ("Buddy & Rescue Procedures", "Ssamsara Freedive", "All levels", "One-page checklist for buddy rotation, safety diver positioning and rescue.", "Freediving Safety", "pdf", DEMO_URL, "AIDA 1", "certification_level"),
+    ("School Safety Policy", "Ssamsara Freedive", "All levels", "Our in-water supervision rules and emergency action plan.", "School Materials", "pdf", DEMO_URL, None, "public"),
+    ("Dry Training Guide", "Ssamsara Freedive", "AIDA 2", "How to structure CO2 and O2 table cycles safely across a training week.", "Training", "link", DEMO_URL, "AIDA 2", "certification_level"),
 ]
 
 
@@ -299,6 +308,296 @@ TRAINING = [
 ]
 
 
+async def upsert_user(email: str, name: str, role: str, password: str) -> str:
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        await db.users.update_one(
+            {"email": email},
+            {"$set": {"name": name, "role": role, "password_hash": hash_password(password)}},
+        )
+        return existing["id"]
+    uid = new_id()
+    await db.users.insert_one(
+        {
+            "id": uid,
+            "name": name,
+            "email": email,
+            "password_hash": hash_password(password),
+            "role": role,
+            "profile_photo": None,
+            "created_at": now_utc(),
+            "updated_at": now_utc(),
+        }
+    )
+    return uid
+
+
+DEMO_DIVERS: list[dict[str, Any]] = [
+    {
+        "email": "superuser@freedive.demo",
+        "name": "Super User (DEMO)",
+        "role": "super_admin",
+        "password": "Demo123!",
+        "certs": ["AIDA 1", "AIDA 2", "AIDA 3", "AIDA 4"],
+        "profile": {
+            "freediving_since": 2016,
+            "preferred_discipline": "CWTB",
+            "nationality": "Indonesia",
+            "home_training_location": "Ssamsara Pool / Nusa Penida",
+            "school": "Ssamsara Freedive",
+            "instructor_name": "John Doe",
+            "bio": "DEMO / TEST ACCOUNT — used to verify every role and every learning access level.",
+        },
+        "dives": [(30, "CWTB", 40.0, "Nusa Penida"), (10, "STA", 300.0, "Ssamsara Pool")],
+        "goals": [],
+        "training": [],
+        "tables": [],
+    },
+    {
+        "email": "aida2@freedive.demo",
+        "name": "Raka Freediver",
+        "role": "student",
+        "password": "Demo123!",
+        "certs": ["AIDA 1", "AIDA 2"],
+        "profile": {
+            "freediving_since": 2025,
+            "preferred_discipline": "CWTB",
+            "nationality": "Indonesia",
+            "home_training_location": "Jakarta / Thousand Islands",
+            "school": "Ssamsara Freedive",
+            "instructor_name": "John Doe",
+            "bio": "Beginner-to-intermediate diver actively developing relaxation, equalization and depth technique.",
+        },
+        "dives": [
+            (120, "CWTB", 10.0, "Pulau Pramuka"),
+            (95, "CWTB", 12.0, "Pulau Pramuka"),
+            (70, "CWTB", 15.0, "Thousand Islands"),
+            (26, "CWTB", 18.0, "Thousand Islands"),
+            (6, "CWTB", 20.0, "Pulau Pramuka"),
+            (60, "FIM", 14.0, "Pulau Pramuka"),
+            (10, "FIM", 18.0, "Pulau Pramuka"),
+            (18, "CNF", 12.0, "Pulau Pramuka"),
+            (80, "DYNB", 35.0, "Ssamsara Pool"),
+            (40, "DYNB", 44.0, "Ssamsara Pool"),
+            (12, "DYNB", 50.0, "Ssamsara Pool"),
+            (35, "DYN", 42.0, "Ssamsara Pool"),
+            (28, "DNF", 30.0, "Ssamsara Pool"),
+            (90, "STA", 120.0, "Ssamsara Pool"),
+            (45, "STA", 145.0, "Ssamsara Pool"),
+            (8, "STA", 165.0, "Ssamsara Pool"),
+        ],
+        "goals": [("CWTB", 24.0), ("DYNB", 60.0)],
+        "training": [
+            (3, "co2", "CO2 Table — 8 Rounds", 1740, 8, 8, 120, 6, "Completed 8/8 rounds."),
+            (5, "static", "", 1200, None, None, 165, 7, "Best hold 02:45."),
+            (7, "equalization", "", 1200, None, None, None, 4, "Frenzel practice and dry equalization."),
+        ],
+        "tables": [],
+    },
+    {
+        "email": "aida3@freedive.demo",
+        "name": "Maya Freediver",
+        "role": "student",
+        "password": "Demo123!",
+        "certs": ["AIDA 1", "AIDA 2", "AIDA 3"],
+        "profile": {
+            "freediving_since": 2023,
+            "preferred_discipline": "CWTB",
+            "nationality": "Indonesia",
+            "home_training_location": "Bali",
+            "school": "Ssamsara Freedive",
+            "instructor_name": "John Doe",
+            "bio": "Intermediate freediver focusing on depth progression, freefall, advanced equalization and dynamic performance.",
+        },
+        "dives": [
+            (150, "CWTB", 22.0, "Amed"),
+            (110, "CWTB", 26.0, "Amed"),
+            (60, "CWTB", 28.0, "Tulamben"),
+            (25, "CWTB", 30.0, "Amed"),
+            (7, "CWTB", 32.0, "Tulamben"),
+            (24, "CWT", 28.0, "Tulamben"),
+            (12, "CWT", 30.0, "Tulamben"),
+            (40, "FIM", 30.0, "Tulamben"),
+            (11, "FIM", 35.0, "Tulamben"),
+            (19, "CNF", 20.0, "Amed"),
+            (95, "DYNB", 60.0, "Ssamsara Pool"),
+            (50, "DYNB", 68.0, "Ssamsara Pool"),
+            (9, "DYNB", 75.0, "Ssamsara Pool"),
+            (30, "DYN", 65.0, "Ssamsara Pool"),
+            (22, "DNF", 50.0, "Ssamsara Pool"),
+            (80, "STA", 185.0, "Ssamsara Pool"),
+            (35, "STA", 205.0, "Ssamsara Pool"),
+            (5, "STA", 225.0, "Ssamsara Pool"),
+        ],
+        "goals": [("CWTB", 40.0), ("DYNB", 90.0)],
+        "training": [
+            (2, "co2", "My CO2 Table", 1800, 16, 16, 150, 6, "8 rounds, longest hold 02:30."),
+            (4, "o2", "My O2 Table", 2100, 17, 17, 200, 8, "Last hold 03:20 — demanding."),
+            (6, "warmup", "Depth Warm-up", 900, 8, 8, 120, 5, "Full warm-up completed."),
+            (8, "static", "", 1500, None, None, 225, 7, "New STA best 03:45."),
+            (10, "dynamic", "", 1800, None, None, None, 7, "DYNB 70 m repeats."),
+        ],
+        "tables": [
+            ("My CO2 Table", "co2", "Personal CO2 progression.", co2_template()),
+            ("My O2 Table", "o2", "Personal O2 progression.", o2_template()),
+            (
+                "Depth Warm-up",
+                "warmup",
+                "Pre-attempt depth warm-up.",
+                [
+                    ("relax", 120, "Relax"),
+                    ("hold", 60, "Hold"),
+                    ("recovery", 120, "Recovery"),
+                    ("hold", 90, "Hold"),
+                    ("recovery", 150, "Recovery"),
+                    ("hold", 120, "Hold"),
+                    ("recovery", 180, "Recovery"),
+                    ("main_attempt", 0, "Main attempt"),
+                ],
+            ),
+            (
+                "STA Warm-up",
+                "warmup",
+                "Personal static preparation.",
+                [
+                    ("stretch", 180, "Rib and diaphragm stretching"),
+                    ("relax", 180, "Passive relaxation"),
+                    ("hold", 90, "Easy hold"),
+                    ("recovery", 180, "Recovery"),
+                    ("main_attempt", 0, "Main static attempt"),
+                ],
+            ),
+        ],
+    },
+]
+
+
+async def seed_demo_divers(instructor_id: str) -> None:
+    """Level-based access demo accounts. Idempotent: their demo data is replaced each run."""
+    for spec in DEMO_DIVERS:
+        uid = await upsert_user(spec["email"], spec["name"], spec["role"], spec["password"])
+
+        await db.diver_profiles.update_one(
+            {"user_id": uid},
+            {
+                "$set": {
+                    "id": new_id(),
+                    "user_id": uid,
+                    "name": spec["name"],
+                    "email": spec["email"],
+                    **spec["profile"],
+                }
+            },
+            upsert=True,
+        )
+
+        # verified certifications are the source of truth for learning access
+        await db.certifications.delete_many({"user_id": uid})
+        for index, level in enumerate(spec["certs"]):
+            await db.certifications.insert_one(
+                {
+                    "id": new_id(),
+                    "user_id": uid,
+                    "user_name": spec["name"],
+                    "agency": "AIDA",
+                    "certification": level,
+                    "instructor": "John Doe",
+                    "certification_date": days_ago_str(360 - index * 90),
+                    "expiration_date": None,
+                    "certificate_number": f"AIDA-{rank_of('AIDA', level)}-{1000 + index}",
+                    "certificate_file_url": None,
+                    "status": "verified",
+                }
+            )
+
+        if spec["role"] == "student":
+            await db.instructor_students.update_one(
+                {"instructor_id": instructor_id, "student_id": uid},
+                {"$set": {"id": new_id(), "instructor_id": instructor_id, "student_id": uid}},
+                upsert=True,
+            )
+
+        await db.dive_logs.delete_many({"user_id": uid})
+        await db.personal_bests.delete_many({"user_id": uid})
+        for ago, discipline, value, location in spec["dives"]:
+            await db.dive_logs.insert_one(
+                {
+                    "id": new_id(),
+                    "user_id": uid,
+                    "date": days_ago_str(ago),
+                    "discipline": discipline,
+                    "value": float(value),
+                    "unit": UNIT.get(discipline, "m"),
+                    "group": group_of(discipline),
+                    "location": location,
+                    "dive_type": "Open water" if group_of(discipline) == "depth" else "Pool",
+                    "duration_seconds": int(value) if discipline == "STA" else None,
+                    "water_temperature": 28.0,
+                    "equalization": "Frenzel",
+                    "buddy": "John Doe",
+                    "feeling": 4,
+                    "notes": None,
+                    "is_pb": False,
+                    "created_at": now_utc(),
+                }
+            )
+        for discipline in {d[1] for d in spec["dives"]}:
+            await recalc_discipline_pb(uid, discipline)
+
+        await db.goals.delete_many({"user_id": uid})
+        for discipline, target in spec["goals"]:
+            await db.goals.insert_one(
+                {
+                    "id": new_id(),
+                    "user_id": uid,
+                    "discipline": discipline,
+                    "target_value": float(target),
+                    "target_date": days_ago_str(-120),
+                    "status": "active",
+                    "created_at": now_utc(),
+                }
+            )
+
+        await db.training_entries.delete_many({"user_id": uid})
+        for ago, ttype, table, duration, done, total, hold, difficulty, notes in spec["training"]:
+            await db.training_entries.insert_one(
+                {
+                    "id": new_id(),
+                    "user_id": uid,
+                    "source": "session" if table else "manual",
+                    "date": days_ago_str(ago),
+                    "training_type": ttype,
+                    "table_name": table,
+                    "duration_seconds": duration,
+                    "completed_steps": done,
+                    "total_steps": total,
+                    "longest_hold_seconds": hold,
+                    "result": None,
+                    "difficulty": difficulty,
+                    "notes": notes,
+                    "created_at": now_utc(),
+                }
+            )
+
+        await db.training_tables.delete_many({"user_id": uid})
+        for name, category, description, rows in spec["tables"]:
+            await db.training_tables.insert_one(
+                {
+                    "id": new_id(),
+                    "user_id": uid,
+                    "name": name,
+                    "category": category,
+                    "description": description,
+                    "is_template": False,
+                    "steps": steps(rows),
+                    "created_at": now_utc(),
+                }
+            )
+
+        info = await sync_profile_level(uid)
+        print(f"  {spec['email']:28} role={spec['role']:12} level={info['level']}")
+
+
 async def main() -> None:
     user_ids: dict[str, str] = {}
     for email, name, role, password in USERS:
@@ -388,7 +687,7 @@ async def main() -> None:
             upsert=True,
         )
 
-    for title, org, level, desc, category, rtype, url in RESOURCES:
+    for title, org, level, desc, category, rtype, url, min_level, access_type in RESOURCES:
         await db.learning_resources.update_one(
             {"title": title},
             {
@@ -401,11 +700,19 @@ async def main() -> None:
                     "resource_type": rtype,
                     "resource_url": url,
                     "is_active": True,
+                    "access_agency": "AIDA",
+                    "minimum_access_level": min_level,
+                    "minimum_level_rank": rank_of("AIDA", min_level) or 0,
+                    "resource_access_type": access_type,
                 },
                 "$setOnInsert": {"id": new_id(), "created_at": now_utc()},
             },
             upsert=True,
         )
+    # drop resources from earlier seeds that are no longer part of the catalogue
+    await db.learning_resources.delete_many(
+        {"title": {"$in": ["AIDA 1", "AIDA 2", "AIDA 3", "AIDA 4", "Equalization Fundamentals"]}}
+    )
 
     for name, category, description, rows in TEMPLATES:
         await db.training_tables.update_one(
@@ -529,6 +836,7 @@ async def main() -> None:
         {
             "id": new_id(),
             "user_id": alex,
+            "user_name": "Alex Diver",
             "agency": "AIDA",
             "certification": "AIDA 2",
             "instructor": "John Doe",
@@ -536,8 +844,13 @@ async def main() -> None:
             "expiration_date": None,
             "certificate_number": "AIDA-2-90231",
             "certificate_file_url": None,
+            "status": "verified",
         }
     )
+
+    await seed_demo_divers(instructor)
+    for uid in (alex, sara):
+        await sync_profile_level(uid)
 
     print("seed complete")
     print("hero image:", HERO)

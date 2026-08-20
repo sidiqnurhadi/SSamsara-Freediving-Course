@@ -77,7 +77,7 @@ def require_roles(*roles: str):
 
 async def assert_can_view(viewer: dict[str, Any], target_user_id: str) -> None:
     """Data isolation: self, admin, or an instructor assigned to that student."""
-    if viewer["id"] == target_user_id or viewer["role"] == "admin":
+    if viewer["id"] == target_user_id or viewer["role"] in {"admin", "super_admin"}:
         return
     if viewer["role"] == "instructor":
         link = await db.instructor_students.find_one(

@@ -30,7 +30,7 @@ export async function endSession(qc: QueryClient) {
 }
 
 export function homeForRole(role: User["role"]): string {
-  if (role === "admin") return "/admin";
+  if (role === "admin" || role === "super_admin") return "/admin";
   if (role === "instructor") return "/instructor";
   return "/app";
 }

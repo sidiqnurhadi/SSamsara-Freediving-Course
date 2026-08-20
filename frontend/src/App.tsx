@@ -143,7 +143,7 @@ export default function App() {
         <Route
           path="/instructor"
           element={
-            <RequireAuth roles={["instructor", "admin"]}>
+            <RequireAuth roles={["instructor", "admin", "super_admin"]}>
               <InstructorDashboard />
             </RequireAuth>
           }
@@ -151,7 +151,7 @@ export default function App() {
         <Route
           path="/admin"
           element={
-            <RequireAuth roles={["admin"]}>
+            <RequireAuth roles={["admin", "super_admin"]}>
               <AdminDashboard />
             </RequireAuth>
           }

@@ -1,19 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import { ErrorState } from "@/components/Bits";
 import { LoadingVeil } from "@/components/Guards";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiGet, apiPut } from "@/lib/api";
 import { formatUnitValue } from "@/lib/fd";
 import { endSession } from "@/lib/session";
-import type { DiverProfile, PersonalBest } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import type { DiverProfile, LearningSummary, PersonalBest } from "@/lib/types";
 
 export default function Profile() {
   const qc = useQueryClient();
@@ -39,6 +40,12 @@ export default function Profile() {
   const { data: pbs } = useQuery({
     queryKey: ["personal-bests"],
     queryFn: () => apiGet<PersonalBest[]>("/personal-bests"),
+    retry: false,
+  });
+
+  const { data: level, isLoading: levelLoading } = useQuery({
+    queryKey: ["certification-level"],
+    queryFn: () => apiGet<LearningSummary>("/certifications/level"),
     retry: false,
   });
 
@@ -110,6 +117,41 @@ export default function Profile() {
           </div>
         </section>
 
+        <section className="glass rounded-2xl px-5 py-5" data-testid="profile-level-card">
+          <p className="text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
+            Current learning level
+          </p>
+          <p className="stat-num mt-1 text-2xl" data-testid="profile-level-value">
+            {levelLoading ? "…" : (level?.level ?? "Not certified yet")}
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Accessible manuals:{" "}
+            <span className="text-foreground" data-testid="profile-accessible-levels">
+              {level && level.accessible_levels.length > 0
+                ? level.accessible_levels.join(" · ")
+                : levelLoading
+                  ? "…"
+                  : "public resources only"}
+            </span>
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Next level: {level?.next_level ?? "Highest level reached"}
+          </p>
+          {level?.next_level ? (
+            <Link
+              to="/courses"
+              className={cn(buttonVariants({ size: "sm", variant: "outline" }), "mt-4")}
+              data-testid="profile-explore-next-course"
+            >
+              Explore {level.next_level} course
+            </Link>
+          ) : null}
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Your level comes from verified certifications only — ask the school to verify a new
+            certification to unlock its learning material.
+          </p>
+        </section>
+
         <form
           className="space-y-4"
           onSubmit={(event) => {
@@ -135,7 +177,7 @@ export default function Profile() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Field id="profile-name-input" label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} testid="profile-name-input" />
             <Field id="profile-since" label="Freediving since" value={form.freediving_since} onChange={(v) => setForm({ ...form, freediving_since: v })} testid="profile-since-input" />
-            <Field id="profile-cert" label="Certification" value={form.certification_summary} onChange={(v) => setForm({ ...form, certification_summary: v })} testid="profile-certification-input" />
+            <Field id="profile-cert" label="Certification (verified — read only)" value={form.certification_summary} onChange={() => undefined} testid="profile-certification-input" readOnly />
             <Field id="profile-discipline" label="Preferred discipline" value={form.preferred_discipline} onChange={(v) => setForm({ ...form, preferred_discipline: v })} testid="profile-discipline-input" />
             <Field id="profile-nationality" label="Nationality" value={form.nationality} onChange={(v) => setForm({ ...form, nationality: v })} testid="profile-nationality-input" />
             <Field id="profile-location" label="Home training location" value={form.home_training_location} onChange={(v) => setForm({ ...form, home_training_location: v })} testid="profile-location-input" />
@@ -195,19 +237,28 @@ function Field({
   value,
   onChange,
   testid,
+  readOnly = false,
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
   testid: string;
+  readOnly?: boolean;
 }) {
   return (
     <div className="space-y-2">
       <Label htmlFor={id} className="text-xs">
         {label}
       </Label>
-      <Input id={id} value={value} onChange={(e) => onChange(e.target.value)} data-testid={testid} />
+      <Input
+        id={id}
+        value={value}
+        readOnly={readOnly}
+        className={readOnly ? "text-muted-foreground" : undefined}
+        onChange={(e) => onChange(e.target.value)}
+        data-testid={testid}
+      />
     </div>
   );
 }

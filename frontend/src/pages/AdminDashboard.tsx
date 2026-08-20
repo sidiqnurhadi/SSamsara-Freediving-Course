@@ -28,7 +28,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import { formatPrice } from "@/lib/fd";
 import { StaffFrame } from "@/pages/InstructorDashboard";
-import type { AdminOverview, Course, LearningResource, Role, User } from "@/lib/types";
+import type {
+  AdminOverview,
+  CertStatus,
+  Certification,
+  Course,
+  LearningResource,
+  Role,
+  User,
+} from "@/lib/types";
 
 const ROLES: Role[] = ["student", "instructor", "admin"];
 
@@ -52,6 +60,9 @@ export default function AdminDashboard() {
           <TabsTrigger value="resources" data-testid="admin-tab-resources">
             Learning
           </TabsTrigger>
+          <TabsTrigger value="certifications" data-testid="admin-tab-certifications">
+            Certifications
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="pt-6">
           <OverviewPanel />
@@ -64,6 +75,9 @@ export default function AdminDashboard() {
         </TabsContent>
         <TabsContent value="resources" className="pt-6">
           <ResourcesPanel />
+        </TabsContent>
+        <TabsContent value="certifications" className="pt-6">
+          <CertificationsPanel />
         </TabsContent>
       </Tabs>
     </StaffFrame>
@@ -470,6 +484,9 @@ interface ResourceDraft {
   resource_type: string;
   resource_url: string;
   is_active: boolean;
+  access_agency: string;
+  minimum_access_level: string;
+  resource_access_type: string;
 }
 
 const BLANK_RESOURCE: ResourceDraft = {
@@ -482,7 +499,12 @@ const BLANK_RESOURCE: ResourceDraft = {
   resource_type: "link",
   resource_url: "",
   is_active: true,
+  access_agency: "AIDA",
+  minimum_access_level: "AIDA 1",
+  resource_access_type: "certification_level",
 };
+
+const ACCESS_TYPES = ["certification_level", "course_enrollment", "admin_only", "public"];
 
 const RESOURCE_TYPES = ["manual", "pdf", "link", "video"];
 
@@ -546,7 +568,10 @@ function ResourcesPanel() {
             <div className="min-w-0">
               <p className="text-sm">{resource.title}</p>
               <p className="truncate text-xs text-muted-foreground">
-                {resource.category} · {resource.resource_type}
+                {resource.category} · {resource.resource_type} ·{" "}
+                {resource.resource_access_type === "certification_level"
+                  ? `min ${resource.minimum_access_level ?? "—"}`
+                  : resource.resource_access_type}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -567,6 +592,9 @@ function ResourcesPanel() {
                     resource_type: resource.resource_type,
                     resource_url: resource.resource_url,
                     is_active: resource.is_active,
+                    access_agency: resource.access_agency ?? "AIDA",
+                    minimum_access_level: resource.minimum_access_level ?? "AIDA 1",
+                    resource_access_type: resource.resource_access_type ?? "certification_level",
                   })
                 }
                 data-testid={`admin-resource-edit-${resource.id}`}
@@ -634,6 +662,46 @@ function ResourcesPanel() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label className="text-xs">Minimum access level</Label>
+                <Select
+                  value={draft.minimum_access_level}
+                  onValueChange={(value: string) =>
+                    setDraft({ ...draft, minimum_access_level: value })
+                  }
+                >
+                  <SelectTrigger data-testid="admin-resource-min-level-select">
+                    <SelectValue>{(v) => String(v)}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AIDA_LEVELS.map((item) => (
+                      <SelectItem key={item} value={item}>
+                        {item}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">Access type</Label>
+                <Select
+                  value={draft.resource_access_type}
+                  onValueChange={(value: string) =>
+                    setDraft({ ...draft, resource_access_type: value })
+                  }
+                >
+                  <SelectTrigger data-testid="admin-resource-access-type-select">
+                    <SelectValue>{(v) => String(v).replace(/_/g, " ")}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ACCESS_TYPES.map((item) => (
+                      <SelectItem key={item} value={item}>
+                        {item.replace(/_/g, " ")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="sm:col-span-2">
                 <TextField label="Resource URL *" value={draft.resource_url} onChange={(v) => setDraft({ ...draft, resource_url: v })} testid="admin-resource-url-input" />
               </div>
@@ -688,6 +756,199 @@ function TextField({
     <div className="space-y-2">
       <Label className="text-xs">{label}</Label>
       <Input value={value} onChange={(e) => onChange(e.target.value)} data-testid={testid} />
+    </div>
+  );
+}
+
+const CERT_STATUSES: CertStatus[] = ["pending", "verified", "expired", "rejected"];
+const AIDA_LEVELS = ["AIDA 1", "AIDA 2", "AIDA 3", "AIDA 4"];
+
+function CertificationsPanel() {
+  const qc = useQueryClient();
+  const [studentId, setStudentId] = useState("");
+  const [level, setLevel] = useState("AIDA 2");
+
+  const certs = useQuery({
+    queryKey: ["admin-certifications"],
+    queryFn: () => apiGet<Certification[]>("/admin/certifications"),
+    retry: false,
+  });
+  const users = useQuery({
+    queryKey: ["admin-users"],
+    queryFn: () => apiGet<User[]>("/admin/users"),
+    retry: false,
+  });
+
+  const invalidate = async () => {
+    await qc.invalidateQueries({ queryKey: ["admin-certifications"] });
+    await qc.invalidateQueries({ queryKey: ["learning-resources"] });
+    await qc.invalidateQueries({ queryKey: ["learning-summary"] });
+  };
+
+  const setStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: CertStatus }) =>
+      apiPatch<Certification>(`/admin/certifications/${id}`, { status }),
+    onSuccess: async () => {
+      toast.success("Certification status updated — learning access follows immediately.");
+      await invalidate();
+    },
+    onError: () => toast.error("Could not update this certification."),
+  });
+
+  const setLevelFor = useMutation({
+    mutationFn: ({ id, certification }: { id: string; certification: string }) =>
+      apiPatch<Certification>(`/admin/certifications/${id}`, { certification }),
+    onSuccess: async () => {
+      toast.success("Certification level corrected.");
+      await invalidate();
+    },
+    onError: () => toast.error("Could not change the level."),
+  });
+
+  const assign = useMutation({
+    mutationFn: () =>
+      apiPost<Certification>("/admin/certifications", {
+        user_id: studentId,
+        agency: "AIDA",
+        certification: level,
+        instructor: "John Doe",
+        status: "verified",
+      }),
+    onSuccess: async () => {
+      toast.success("Certification assigned and verified.");
+      await invalidate();
+    },
+    onError: () => toast.error("Could not assign this certification."),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => apiDelete(`/admin/certifications/${id}`),
+    onSuccess: async () => {
+      toast.success("Certification removed.");
+      await invalidate();
+    },
+    onError: () => toast.error("Could not remove this certification."),
+  });
+
+  if (certs.isLoading) return <LoadingVeil label="Loading certifications" />;
+  if (certs.isError) return <ErrorState testid="admin-certifications-error" />;
+
+  return (
+    <div className="space-y-5">
+      <div className="glass flex flex-wrap items-end gap-3 rounded-2xl px-5 py-5">
+        <div className="min-w-56 flex-1 space-y-2">
+          <Label className="text-xs">Diver</Label>
+          <Select value={studentId} onValueChange={(value: string) => setStudentId(value)}>
+            <SelectTrigger data-testid="admin-cert-user-select">
+              <SelectValue>
+                {(v) =>
+                  (users.data ?? []).find((u) => u.id === v)?.name ?? "Select a diver"
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {(users.data ?? []).map((user) => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.name} · {user.role}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-40 space-y-2">
+          <Label className="text-xs">Certification</Label>
+          <Select value={level} onValueChange={(value: string) => setLevel(value)}>
+            <SelectTrigger data-testid="admin-cert-level-select">
+              <SelectValue>{(v) => String(v)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {AIDA_LEVELS.map((item) => (
+                <SelectItem key={item} value={item}>
+                  {item}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          onClick={() => {
+            if (!studentId) {
+              toast.error("Select a diver first.");
+              return;
+            }
+            assign.mutate();
+          }}
+          disabled={assign.isPending}
+          data-testid="admin-cert-assign-button"
+        >
+          <Plus className="size-4" /> Assign &amp; verify
+        </Button>
+      </div>
+
+      <ul className="space-y-2" data-testid="admin-certifications-list">
+        {(certs.data ?? []).map((cert) => (
+          <li
+            key={cert.id}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/6 bg-card px-4 py-3"
+            data-testid={`admin-cert-row-${cert.id}`}
+          >
+            <div className="min-w-0">
+              <p className="text-sm">{cert.user_name}</p>
+              <p className="text-xs text-muted-foreground">
+                {cert.agency} · rank {cert.rank}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={cert.status === "verified" ? "default" : "outline"}>
+                {cert.status}
+              </Badge>
+              <Select
+                value={cert.certification}
+                onValueChange={(value: string) =>
+                  setLevelFor.mutate({ id: cert.id, certification: value })
+                }
+              >
+                <SelectTrigger className="min-w-28" data-testid={`admin-cert-level-${cert.id}`}>
+                  <SelectValue>{(v) => String(v)}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {AIDA_LEVELS.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={cert.status}
+                onValueChange={(value: string) =>
+                  setStatus.mutate({ id: cert.id, status: value as CertStatus })
+                }
+              >
+                <SelectTrigger className="min-w-32" data-testid={`admin-cert-status-${cert.id}`}>
+                  <SelectValue>{(v) => String(v)}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {CERT_STATUSES.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => remove.mutate(cert.id)}
+                data-testid={`admin-cert-delete-${cert.id}`}
+                aria-label="Delete certification"
+              >
+                <Trash2 className="size-4 text-destructive" />
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

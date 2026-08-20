@@ -20,6 +20,27 @@ Auth is an httpOnly JWT cookie (`fd_session`); roles: `student`, `instructor`, `
 - `training_tables` — name, category (co2|o2|warmup|custom), is_template, embedded `steps[]`
 - `training_entries` — unified history: `source` = `session` (timer) or `manual`
 - `learning_resources`, `certifications`, `instructor_students`, `instructor_notes`, `password_resets`
+  - `certifications` also carry `status` (pending|verified|expired|rejected) — only `verified` grants access
+  - `learning_resources` also carry `access_agency`, `minimum_access_level`, `minimum_level_rank`,
+    `resource_access_type` (certification_level|course_enrollment|admin_only|public)
+
+## Certification-based learning access (level ≠ role)
+- `lib/levels.py` — generic agency→[(label, rank)] registry (AIDA 1–4, Molchanovs Waves, SSI Levels).
+  Authorization compares integer ranks, never level strings, so new agencies are a data change.
+- `lib/access.py` — `current_level(user_id)` derives the level from the **highest verified**
+  certification; `effective_rank()` adds the super_admin `preview_rank` override;
+  `sync_profile_level()` mirrors it onto `diver_profiles` for display only.
+- Rule: `can_access(user_rank, minimum_rank)` → a diver reads their level and everything below it.
+- Enforced server-side in `routers/content.py`: the list endpoint blanks `resource_url` for locked
+  rows and `GET /api/learning-resources/{id}/open` returns **403** with
+  "This resource requires AIDA N certification." — the locked URL is never sent to the client.
+- `GET /api/learning-resources/summary` and `GET /api/certifications/level` power the learning
+  banner, the dashboard learning card and the profile level card.
+- Self-added certifications are forced to `pending` (no self-upgrade). Admin/super_admin manage them
+  via `/api/admin/certifications` (assign, PATCH status/level, delete); access updates immediately,
+  with no per-resource permission editing.
+- Roles: `student`, `instructor`, `admin`, `super_admin`. Role controls what a user may *do*;
+  certification level controls what educational content they may *read*.
 
 ## Key logic
 - Disciplines: depth = CWT/CWTB/CNF/FIM/VWT/NLT, dynamic = DYN/DYNB/DNF, static = STA (value in seconds).
@@ -44,9 +65,16 @@ Public `/`, `/courses`, `/courses/:slug`, `/about`, `/instructors`, `/login`, `/
 
 ## Seed (backend/seed.py, idempotent)
 Alex Diver (AIDA 2, CWTB) with 19 dives, PBs CWTB 24 m / DYNB 75 m / STA 03:20, 3 goals,
-7 training entries, 1 certification; Sara Blue (FIM 30 m); instructor John Doe assigned to both;
-7 courses; 8 learning resources; 5 table templates (CO2 8-round, O2 5-round, 3 warm-ups).
+7 training entries, 1 certification; Sara Blue (FIM 30 m); instructor John Doe assigned to all
+students; 7 courses; 11 learning resources (AIDA 1–4 manuals + level-gated guides + one public
+policy); 5 table templates (CO2 8-round, O2 5-round, 3 warm-ups).
+Level-demo accounts: Super User (super_admin, AIDA 1–4 verified), Raka Freediver (AIDA 2, 16 dives,
+2 goals, 3 sessions), Maya Freediver (AIDA 3, 18 dives, 2 goals, 5 sessions, 4 personal tables).
+See memory/test_credentials.md for logins and the expected access matrix.
 
 ## Known deviations
 - Forgot-password returns the reset token in the API response (no mail provider configured).
 - No course booking/payment, no PDF hosting (admin-configured external links only), no PWA.
+- Course enrollment is not built yet, so `resource_access_type = course_enrollment` is accepted and
+  stored (and treated as ungated) but no enrollment check exists — AIDA manuals use
+  `certification_level` as specified.

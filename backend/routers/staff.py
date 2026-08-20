@@ -1,13 +1,18 @@
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from lib.access import sync_profile_level
 from lib.auth import assert_can_view, current_user, require_roles
 from lib.db import db
 from lib.disciplines import DEPTH
+from lib.levels import rank_of
 from models.schemas import (
+    AdminCertificationInput,
+    AdminCertificationUpdate,
     AdminOverview,
     AdminUserUpdate,
+    Certification,
     InstructorNote,
     InstructorNoteInput,
     OkResult,
@@ -18,8 +23,8 @@ from models.schemas import (
 )
 
 router = APIRouter(tags=["staff"])
-instructor_or_admin = require_roles("instructor", "admin")
-admin_only = require_roles("admin")
+instructor_or_admin = require_roles("instructor", "admin", "super_admin")
+admin_only = require_roles("admin", "super_admin")
 
 
 def _public(user: dict[str, Any]) -> UserPublic:
@@ -35,7 +40,7 @@ def _public(user: dict[str, Any]) -> UserPublic:
 # ---------------- instructor ----------------
 @router.get("/instructor/students", response_model=list[StudentSummary])
 async def my_students(viewer: dict[str, Any] = Depends(instructor_or_admin)):
-    if viewer["role"] == "admin":
+    if viewer["role"] in {"admin", "super_admin"}:
         students = await db.users.find({"role": "student"}, {"_id": 0}).to_list(500)
     else:
         links = await db.instructor_students.find(
@@ -148,4 +153,93 @@ async def admin_delete_user(user_id: str, viewer: dict[str, Any] = Depends(admin
         db.certifications,
     ):
         await collection.delete_many({"user_id": user_id})
+    return OkResult()
+
+
+# ---------------- admin: certification management ----------------
+@router.get("/admin/certifications", response_model=list[Certification])
+async def admin_certifications(
+    user_id: Optional[str] = None, _: dict[str, Any] = Depends(admin_only)
+):
+    query: dict[str, Any] = {"user_id": user_id} if user_id else {}
+    docs = await db.certifications.find(query, {"_id": 0}).to_list(1000)
+    names = {u["id"]: u["name"] for u in await db.users.find({}, {"_id": 0}).to_list(2000)}
+    out: list[Certification] = []
+    for doc in docs:
+        out.append(
+            Certification(
+                id=doc["id"],
+                user_id=doc["user_id"],
+                user_name=names.get(doc["user_id"], doc.get("user_name", "")),
+                agency=doc["agency"],
+                certification=doc["certification"],
+                instructor=doc.get("instructor"),
+                certification_date=doc.get("certification_date"),
+                expiration_date=doc.get("expiration_date"),
+                certificate_number=doc.get("certificate_number"),
+                certificate_file_url=doc.get("certificate_file_url"),
+                status=doc.get("status") or "verified",
+                rank=rank_of(doc.get("agency"), doc.get("certification")) or 0,
+            )
+        )
+    out.sort(key=lambda c: (c.user_name, -c.rank))
+    return out
+
+
+@router.post("/admin/certifications", response_model=Certification)
+async def admin_assign_certification(
+    payload: AdminCertificationInput, _: dict[str, Any] = Depends(admin_only)
+):
+    user = await db.users.find_one({"id": payload.user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if rank_of(payload.agency, payload.certification) is None:
+        raise HTTPException(status_code=422, detail="Unknown certification level for that agency")
+    doc = {
+        "id": new_id(),
+        "user_name": user["name"],
+        **payload.model_dump(),
+        "expiration_date": None,
+        "certificate_file_url": None,
+        "created_at": now_utc(),
+    }
+    await db.certifications.insert_one(dict(doc))
+    # learning access follows immediately — no per-resource permission editing
+    await sync_profile_level(payload.user_id)
+    return Certification(
+        **{**doc, "rank": rank_of(payload.agency, payload.certification) or 0}
+    )
+
+
+@router.patch("/admin/certifications/{cert_id}", response_model=Certification)
+async def admin_update_certification(
+    cert_id: str, payload: AdminCertificationUpdate, _: dict[str, Any] = Depends(admin_only)
+):
+    existing = await db.certifications.find_one({"id": cert_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Certification not found")
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=422, detail="Nothing to update")
+    doc = {**existing, **updates}
+    if rank_of(doc.get("agency"), doc.get("certification")) is None:
+        raise HTTPException(status_code=422, detail="Unknown certification level for that agency")
+    await db.certifications.update_one({"id": cert_id}, {"$set": {**updates, "updated_at": now_utc()}})
+    await sync_profile_level(doc["user_id"])
+    return Certification(
+        **{
+            **doc,
+            "status": doc.get("status") or "verified",
+            "rank": rank_of(doc.get("agency"), doc.get("certification")) or 0,
+        }
+    )
+
+
+@router.delete("/admin/certifications/{cert_id}", response_model=OkResult)
+async def admin_delete_certification(cert_id: str, _: dict[str, Any] = Depends(admin_only)):
+    existing = await db.certifications.find_one({"id": cert_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Certification not found")
+    await db.certifications.delete_one({"id": cert_id})
+    await sync_profile_level(existing["user_id"])
     return OkResult()

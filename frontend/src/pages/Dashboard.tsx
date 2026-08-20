@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Timer, Trophy } from "lucide-react";
+import { ArrowRight, BookOpen, Timer, Trophy } from "lucide-react";
 import { Link } from "react-router-dom";
 import AppShell from "@/components/AppShell";
 import { EmptyState, ErrorState, StatTile } from "@/components/Bits";
@@ -231,6 +231,40 @@ export default function Dashboard() {
                   >
                     <Timer className="size-4" /> Run a table
                     <ArrowRight className="size-4" />
+                  </Link>
+                </div>
+
+                <div className="glass rounded-2xl px-5 py-5" data-testid="dashboard-learning-card">
+                  <p className="text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
+                    Learning
+                  </p>
+                  <p className="stat-num mt-1 text-2xl" data-testid="dashboard-learning-level">
+                    {data.learning.unrestricted
+                      ? "Full access"
+                      : (data.learning.level ?? "Not certified yet")}
+                  </p>
+                  <dl className="mt-3 space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Available resources</dt>
+                      <dd className="stat-num" data-testid="dashboard-learning-available">
+                        {data.learning.available_count}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Locked</dt>
+                      <dd className="stat-num">{data.learning.locked_count}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Next level</dt>
+                      <dd>{data.learning.next_level ?? "Highest level reached"}</dd>
+                    </div>
+                  </dl>
+                  <Link
+                    to="/app/learning"
+                    className={cn(buttonVariants({ size: "sm" }), "mt-5 w-full")}
+                    data-testid="dashboard-continue-learning-link"
+                  >
+                    <BookOpen className="size-4" /> Continue learning
                   </Link>
                 </div>
               </div>

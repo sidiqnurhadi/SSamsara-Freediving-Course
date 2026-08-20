@@ -15,7 +15,9 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-Role = Literal["student", "instructor", "admin"]
+Role = Literal["student", "instructor", "admin", "super_admin"]
+CertStatus = Literal["pending", "verified", "expired", "rejected"]
+AccessType = Literal["certification_level", "course_enrollment", "admin_only", "public"]
 
 
 # ---------- users / auth ----------
@@ -71,6 +73,9 @@ class DiverProfile(BaseModel):
     instructor_name: Optional[str] = None
     bio: Optional[str] = None
     profile_photo: Optional[str] = None
+    current_certification_agency: Optional[str] = None
+    current_certification_level: Optional[str] = None
+    certification_rank: int = 0
 
 
 class DiverProfileUpdate(BaseModel):
@@ -310,6 +315,9 @@ class LearningResourceInput(BaseModel):
     resource_type: Literal["manual", "pdf", "link", "video"] = "link"
     resource_url: str
     is_active: bool = True
+    access_agency: str = "AIDA"
+    minimum_access_level: Optional[str] = None
+    resource_access_type: AccessType = "certification_level"
 
 
 class LearningResource(BaseModel):
@@ -320,8 +328,34 @@ class LearningResource(BaseModel):
     description: Optional[str] = None
     category: str = "School Materials"
     resource_type: str = "link"
+    # Blanked out for locked resources — a locked URL is never sent to the client.
     resource_url: str
     is_active: bool = True
+    access_agency: str = "AIDA"
+    minimum_access_level: Optional[str] = None
+    minimum_level_rank: int = 0
+    resource_access_type: str = "certification_level"
+    locked: bool = False
+    required_level: Optional[str] = None
+
+
+class ResourceUrl(BaseModel):
+    resource_url: str
+    resource_type: str
+    title: str
+
+
+class LearningSummary(BaseModel):
+    agency: str
+    level: Optional[str] = None
+    rank: int = 0
+    next_level: Optional[str] = None
+    available_count: int = 0
+    locked_count: int = 0
+    total_count: int = 0
+    accessible_levels: list[str] = []
+    unrestricted: bool = False
+    preview: bool = False
 
 
 class CertificationInput(BaseModel):
@@ -337,6 +371,7 @@ class CertificationInput(BaseModel):
 class Certification(BaseModel):
     id: str = Field(default_factory=new_id)
     user_id: str
+    user_name: str = ""
     agency: str
     certification: str
     instructor: Optional[str] = None
@@ -344,6 +379,24 @@ class Certification(BaseModel):
     expiration_date: Optional[str] = None
     certificate_number: Optional[str] = None
     certificate_file_url: Optional[str] = None
+    status: CertStatus = "pending"
+    rank: int = 0
+
+
+class AdminCertificationInput(BaseModel):
+    user_id: str
+    agency: str = "AIDA"
+    certification: str = Field(min_length=1)
+    instructor: Optional[str] = None
+    certification_date: Optional[str] = None
+    certificate_number: Optional[str] = None
+    status: CertStatus = "verified"
+
+
+class AdminCertificationUpdate(BaseModel):
+    status: Optional[CertStatus] = None
+    certification: Optional[str] = None
+    agency: Optional[str] = None
 
 
 # ---------- dashboards / analytics ----------
@@ -390,6 +443,7 @@ class DashboardData(BaseModel):
     depth_discipline: Optional[str] = None
     week_training: list[WeeklyTraining]
     week_total_seconds: int
+    learning: LearningSummary
 
 
 class StudentSummary(BaseModel):

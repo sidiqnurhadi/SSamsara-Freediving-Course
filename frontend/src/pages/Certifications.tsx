@@ -70,7 +70,8 @@ export default function Certifications() {
               Certifications
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Your freediving qualifications, private to your account.
+              Your freediving qualifications. A certification only unlocks its learning material
+              once the school marks it <span className="text-foreground">verified</span>.
             </p>
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
@@ -193,6 +194,7 @@ export default function Certifications() {
                 </div>
               </div>
               <dl className="mt-4 space-y-1.5 text-xs">
+                <Row label="Status" value={cert.status} />
                 <Row label="Certified" value={cert.certification_date ? formatDate(cert.certification_date) : "—"} />
                 <Row label="Instructor" value={cert.instructor ?? "—"} />
                 <Row label="Number" value={cert.certificate_number ?? "—"} />

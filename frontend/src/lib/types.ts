@@ -1,7 +1,13 @@
 // Hand-written mirrors of the Pydantic models in backend/models/schemas.py.
 // When a model changes on the backend, change its interface here in the same edit.
 
-export type Role = "student" | "instructor" | "admin";
+export type Role = "student" | "instructor" | "admin" | "super_admin";
+export type CertStatus = "pending" | "verified" | "expired" | "rejected";
+export type AccessType =
+  | "certification_level"
+  | "course_enrollment"
+  | "admin_only"
+  | "public";
 
 export interface User {
   id: string;
@@ -25,6 +31,9 @@ export interface DiverProfile {
   instructor_name: string | null;
   bio: string | null;
   profile_photo: string | null;
+  current_certification_agency: string | null;
+  current_certification_level: string | null;
+  certification_rank: number;
 }
 
 export interface CourseStructureItem {
@@ -180,13 +189,40 @@ export interface LearningResource {
   description: string | null;
   category: string;
   resource_type: string;
+  /** Empty string for locked resources — the backend never sends a locked URL. */
   resource_url: string;
   is_active: boolean;
+  access_agency: string;
+  minimum_access_level: string | null;
+  minimum_level_rank: number;
+  resource_access_type: string;
+  locked: boolean;
+  required_level: string | null;
+}
+
+export interface ResourceUrl {
+  resource_url: string;
+  resource_type: string;
+  title: string;
+}
+
+export interface LearningSummary {
+  agency: string;
+  level: string | null;
+  rank: number;
+  next_level: string | null;
+  available_count: number;
+  locked_count: number;
+  total_count: number;
+  accessible_levels: string[];
+  unrestricted: boolean;
+  preview: boolean;
 }
 
 export interface Certification {
   id: string;
   user_id: string;
+  user_name: string;
   agency: string;
   certification: string;
   instructor: string | null;
@@ -194,6 +230,8 @@ export interface Certification {
   expiration_date: string | null;
   certificate_number: string | null;
   certificate_file_url: string | null;
+  status: CertStatus;
+  rank: number;
 }
 
 export interface DashboardStat {
@@ -239,6 +277,7 @@ export interface DashboardData {
   depth_discipline: string | null;
   week_training: WeeklyTraining[];
   week_total_seconds: number;
+  learning: LearningSummary;
 }
 
 export interface StudentSummary {
